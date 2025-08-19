@@ -127,8 +127,8 @@ def lens_to_source_mapping(tau_m,tau,phi,mu_r=mu_r, mu_t=mu_t, data=data):
 # Function to compute critical curves for a given tau_m and phi - get caustics from lens to source mapping
 def compute_critical_curves(tau_m, phi, tau_values_=tau_values_CC, data=data):
     m_tau = m(data, tau_m)
-    m_vals = np.array([m_tau(t) for t in tau_values_])
-    m_prime_vals = np.array([m_prime(m_tau, t).df for t in tau_values_])
+    m_vals = np.array([m_tau(tau) for tau in tau_values_])
+    m_prime_vals = np.array([m_prime(m_tau, tau).df for tau in tau_values_])
 
     im_vals = inverse_magnification_vec(m_vals, m_prime_vals, tau_values_, phi)
     signs = np.sign(im_vals)
@@ -148,6 +148,7 @@ def compute_critical_curves(tau_m, phi, tau_values_=tau_values_CC, data=data):
 
 # Function to solve the BS lens equation for a given tau_m over a range of timestamps
 def lens_eqn_solver(tau_m, timestamps_=timestamps, tau_values_=tau_values,):
+
     all_solutions = []
     m_tau = m(data, tau_m)
 
@@ -256,7 +257,7 @@ for tau_m, roots, phi in critical_curve_results:
         critical_tau2.append(tau_2)
         """
         # Caustic curve in source plane
-        u1, u2 = lens_to_source_mapping(tau_m, tau, phi, data)
+        u1, u2 = lens_to_source_mapping(tau_m, tau, phi)
         caustic_u1.append(u1)
         caustic_u2.append(u2)
 
