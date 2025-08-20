@@ -55,13 +55,13 @@ def m_prime(m,tau): #derivative of mass profile with respect to tau
 
 #Defining parameters
 
-tau_m_val = 1.0 # R_90/R_E for the boson star
+tau_m_val = 2 # R_90/R_E for the boson star
 
 mu_r = 3.0 #radial magnification
 mu_t = 100.0 #tangential magnification
 
 u_min = 0 #minimum impact parameter
-t_E = 1.0 #Einstein crossing time
+t_E = 10 #Einstein crossing time
 
 
 #Defining value ranges
@@ -111,8 +111,8 @@ def special_solution_eqn_t(tau, m_tau, mu_t=mu_t): # Tangential lens equation (f
     return tau - np.sqrt(mu_t * m_tau(tau))
 
 def source_trajectory(t, u_min=u_min, t_E=t_E): # Source position in the source plane at time t
-    u1 = t / t_E
-    u2 = u_min
+    u1 = u_min
+    u2 = t / t_E
     return u1, u2
 
 
@@ -147,14 +147,19 @@ def compute_critical_curves(tau_m, phi, tau_values_=tau_values_CC, data=data):
 
 
 # Function to solve the BS lens equation for a given tau_m over a range of timestamps
-def lens_eqn_solver(tau_m, timestamps_=timestamps, tau_values_=tau_values,):
+def lens_eqn_solver(tau_m, timestamps_=timestamps,tau_values_=tau_values,data=data):
+
+    m_tau = m(data, tau_m)
 
     all_solutions = []
-    m_tau = m(data, tau_m)
+    u1_traj = []
+    u2_traj = [] # arrays to store trajectory coordinates, required for plotting later
 
     for t in timestamps_: 
 
         u1, u2 = source_trajectory(t)
+        u1_traj.append(u1)
+        u2_traj.append(u2)
 
         if np.isclose(u1, 0.0, atol=1e-6) and np.isclose(u2, 0.0, atol=1e-6):
             
@@ -180,7 +185,7 @@ def lens_eqn_solver(tau_m, timestamps_=timestamps, tau_values_=tau_values,):
                         special_solutions.append((sol.root, np.pi/2))
                         special_solutions.append((sol.root, 3*np.pi/2))
             
-            all_solutions.append((special_solutions, 0))
+            all_solutions.append(special_solutions)
 
         else:
 
@@ -195,93 +200,72 @@ def lens_eqn_solver(tau_m, timestamps_=timestamps, tau_values_=tau_values,):
                         root_and_phi = (sol.root, phi_from_tau(sol.root, m_tau, u1, u2))
                         roots.append(root_and_phi)
 
-            all_solutions.append((roots, t)) 
+            all_solutions.append(roots) 
 
 
-    return all_solutions
+    return all_solutions, np.array(u1_traj), np.array(u2_traj)
 
 
 # Function to calculate the lightcurve for the BS with given tau_m
-def boson_star_lightcurve(tau_m,timestamps_=timestamps, tau_values_=tau_values):
+def boson_star_lightcurve(tau_m,timestamps_=timestamps, tau_values_=tau_values,data=data):
     m_tau = m(data, tau_m)
-    all_solutions = lens_eqn_solver(tau_m, timestamps_, tau_values_)
+    all_solutions, u1_traj, u2_traj = lens_eqn_solver(tau_m, timestamps_, tau_values_)
+
     magnifications = []
 
-    for i in all_solutions:
-        m_tau = m(data, tau_m)
-        magn_temp = []
-        if len(i[0]) > 0:
-            for j in i[0]:
-                magn_temp.append(1/np.abs(inverse_magnification(m_tau,j[0],j[1])))
+    for solution in all_solutions:
+        magn_temp = [1/np.abs(inverse_magnification(m_tau,tau,phi)) for tau, phi in solution]
         total_magn = np.sum(magn_temp)
         magnifications.append(total_magn)
     
-    return magnifications
+    return np.array(magnifications), u1_traj, u2_traj
 
 
-#Plot the lightcurve 
+#Plot the lightcurve and caustic curve with crossing
 
-lightcurve = boson_star_lightcurve(tau_m_val)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
-plt.plot(timestamps, lightcurve, color = 'black', label=r'$\tau_m$ = ' + f'{tau_m_val}')
-plt.xlabel(r'$t/t_E$')
-plt.xlim(-20,20)
-plt.ylabel(r'$\mu$')
-plt.legend(loc='lower left', fontsize ='small')
-plt.yscale('log')
-plt.title(r'Boson Star Lightcurve with $\tau_m$ = ' + f'{tau_m_val}')
-# plt.savefig('/home/bcrossey/Documents/Microlensing/Code/Microcaustics_EDOs/figures/lightcurve_.png', dpi=300, format='png')
-plt.show()
+# Lightcurve
 
+lightcurve, u1_traj, u2_traj = boson_star_lightcurve(tau_m_val)
 
-# Plotting the caustic curve with trajectory
+ax1.plot(timestamps, lightcurve, color='black', label=r'$\tau_m$ = ' + f'{tau_m_val}')
+ax1.set_xlabel(r'$t/t_E$', fontsize=22)
+ax1.set_xlim(-20, 20)
+ax1.set_ylabel(r'$\mu$', fontsize=22)
+# ax1.set_yscale('log')
+ax1.tick_params(axis='both', labelsize=20)
+ax1.set_title(r'Boson Star Lightcurve with $\tau_m$ = ' + f'{tau_m_val}', fontsize=24)
+
+# Caustic curve
 
 arguments = [(tau_m_val, phi, tau_values_CC) for phi in phi_values]
 
 with Pool() as pool:
     critical_curve_results = pool.starmap(compute_critical_curves, arguments)
 
-# critical_tau1 = []
-# critical_tau2 = []
 
 caustic_u1 = []
 caustic_u2 = []
 
 for tau_m, roots, phi in critical_curve_results:
     for tau in roots:
-        """
-        # Critical curve in lens plane
-        tau_1 = tau * np.cos(phi)
-        tau_2 = tau * np.sin(phi)
-        critical_tau1.append(tau_1)
-        critical_tau2.append(tau_2)
-        """
-        # Caustic curve in source plane
         u1, u2 = lens_to_source_mapping(tau_m, tau, phi)
         caustic_u1.append(u1)
         caustic_u2.append(u2)
 
-"""
-# Plot critical curve
-plt.figure(figsize=(6, 6))
-plt.scatter(critical_tau1, critical_tau2, color='black', s=10)
-plt.xlabel(r"$\tau_1$")
-plt.ylabel(r"$\tau_2$")
-plt.title(r"Critical curve for $\tau_m$ = " + f'{tau_m_val}')
-plt.axis('equal')
-plt.grid(True)
-plt.show()
-"""
 
-# Plot caustic curve
-plt.figure(figsize=(6, 6))
-plt.scatter(caustic_u1, caustic_u2, color='black', s=10)
-plt.axhline(y=-u_min, color='red', label='Source Trajectory', linewidth=1.5)
-plt.legend(loc='lower left')
-plt.xlabel(r"$u_1$")
-plt.ylabel(r"$u_2$")
-plt.title(r"Caustic curve for $\tau_m$ = " + f'{tau_m_val}')
-plt.axis('equal')
-plt.grid(True)
+ax2.scatter(caustic_u1, caustic_u2, color='black', s=15)
+ax2.plot(u1_traj, u2_traj, color='red', linewidth=3, label="Source Trajectory")
+ax2.legend(loc='lower left', fontsize='x-large')
+ax2.set_xlabel(r"$u_1$", fontsize=22)
+ax2.set_ylabel(r"$u_2$", fontsize=22)
+ax2.tick_params(axis='both', labelsize=20)
+ax2.set_title(r"Caustic Curve for Boson Star with $\tau_m$ = " + f'{tau_m_val}', fontsize=24)
+ax2.set_xlim(-4, 4)
+ax2.set_ylim(-4,4)
+ax2.grid(True)
+
+plt.tight_layout()
 plt.show()
 
